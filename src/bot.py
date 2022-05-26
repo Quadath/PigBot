@@ -28,13 +28,16 @@ query = Query()
 async def создать_хохла(ctx: commands.Context, name):
     if not db.search(query.owner == str(ctx.author.id)):
         weight = randrange(5) + 5
-        db.insert({'name': name, 'satiety': 0.1, 'max-satiety': math.sqrt(weight) / 2, 'weight': weight, 'food': '200', 'owner': str(ctx.author.id)})
+        db.insert({'name': name, 'satiety': 0.1, 'max-satiety': math.sqrt(weight) / 2, 'weight': weight, 'food': 200, 'owner': str(ctx.author.id)})
         await ctx.reply("Теперь вы обладатель поросёнка. Его зовут " + name + ". Он весит всего " + str(weight) + " кг. Он голоден, покормите его")
     else: 
         await ctx.reply("У вас уже есть хряк")
 @bot.command()
 async def покормить(ctx: commands.Context, food):
-    await feed(int(food), str(ctx.author.id), ctx)
+    if db.search(query.owner == str(ctx.author.id)):
+        await feed(int(food), str(ctx.author.id), ctx)
+    else: 
+        await ctx.reply('У вас нет хряка')
 @bot.command()
 async def хряк(ctx: commands.Context):
     pig = getPigWithId(ctx.author.id)
@@ -47,8 +50,15 @@ async def хряк(ctx: commands.Context):
         status = 'Хряк непротив покушать'
     else:
         status = 'Хряк голоден!'
-    await ctx.reply(f"Имя: {pig['name']} \nВес: {pig['weight']} кг\n {status}")
-
+    await ctx.reply(f"Имя: {pig['name']} \nВес: {math.ceil(pig['weight'])} кг\n {pig['food']} корма \n {status}")
+@bot.command()
+async def топ_хряков(ctx: commands.Context):
+    top = ""
+    sortedPigs = sorted(db.all(), key=lambda d: d['weight'], reverse=True) 
+    for pig in sortedPigs: 
+        top = top + f"{pig['name']}, {math.ceil(pig['weight'])} кг\n"
+    await ctx.reply(top)
+    
 @tasks.loop(seconds=1)
 async def change_status():
     if db.search(query.owner != ""):
@@ -77,18 +87,29 @@ async def feed(food, owner, ctx):
         return
 
     if satiety <= max_satiety * 0.75:
+        diff = max_satiety - satiety
+        if food > diff:
+            revenue = diff
+        print(diff)
         db.update({'satiety': satiety + food}, query.owner == owner)
         db.update({'max-satiety': math.sqrt(weight) / 2}, query.owner == owner)
-        db.update({'weight': pig['weight'] + math.sqrt(food) * (randrange(100) / 50)}, query.owner == owner)
+        db.update({'weight': pig['weight'] + diff * (randrange(100) / 50)}, query.owner == owner)
+        db.update({'food': pig['food'] - 1}, query.owner == owner)
         pig = getPigWithId(owner)
         if pig['satiety'] >= pig['max-satiety']:
-            await ctx.reply(f'Ваш хряк наелся. Теперь он весит {math.ceil(pig["weight"])} кг!')
+            await ctx.reply(f'Ваш хряк наелся. Осталось {pig["food"]} корма. Теперь он весит {math.ceil(pig["weight"])} кг!')
         else: 
             await ctx.reply('Хряк просит больше')        
     else:
         await ctx.reply('Хряк отказался')
 def getPigWithId(id):
     return db.search(query.owner == str(id))[0]
+def findAttributeInObjectsArray(attr, array, target):
+    for obj in array:
+        if obj["attr"] == target:
+            return obj
+
+
 
 # while True:
 #     if db.search(query.owner > 0):
