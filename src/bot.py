@@ -14,6 +14,8 @@ config = {
 }
 
 sleeping = False
+priceRises = True
+food_cost = 10
 
 db = TinyDB('data.json')
 bot = commands.Bot(command_prefix=config['prefix'])
@@ -25,16 +27,14 @@ query = Query()
     # if ctx.author != bot.user:
         # if ctx.channel.name == "моя-свинюшня":
             # await ctx.reply(ctx.content)
-
 @bot.command()
-async def создать_хряка(ctx: commands.Context, name):
+async def создатьхряка(ctx: commands.Context, name):
     if not db.search(query.owner == str(ctx.author.id)):
         weight = randrange(5) + 5
         db.insert({'name': name, 'satiety': 0.1, 'max-satiety': math.sqrt(weight) / 2, 'weight': weight, 'money': 0, 'factory': 0, 'food': 100, 'owner': str(ctx.author.id)})
         await ctx.reply("Теперь вы обладатель поросёнка. Его зовут " + name + ". Он весит всего " + str(weight) + " кг. Он голоден, покормите его")
     else: 
         await ctx.reply("У вас уже есть хряк")
-
 @bot.command()
 async def покормить(ctx: commands.Context, food):
     if not sleeping:
@@ -44,7 +44,6 @@ async def покормить(ctx: commands.Context, food):
             await ctx.reply('У вас нет хряка')
     else:
         await ctx.reply('Хряки спят. Возвращайтесь позже!')
-
 @bot.command()
 async def хряк(ctx: commands.Context):
     if not sleeping:
@@ -75,15 +74,14 @@ async def хряк(ctx: commands.Context):
         await ctx.reply('Все хряки спят. И вам рекомендую')
 @bot.command()
 async def топ(ctx: commands.Context):
-    print(rangePercent(10, 20, 40, 60))
     top = ""
     sortedPigs = sorted(db.all(), key=lambda d: d['weight'], reverse=True) 
     for pig in sortedPigs: 
         top = top + f"{pig['name']}, {math.ceil(pig['weight'])} кг\n"
     await ctx.reply(top)
-
 @bot.command()
 async def пойтиназавод(ctx: commands.Context):
+
     pig = getPigWithId(ctx.author.id)
     if pig['factory'] <= 0:
         revenue = 10 + randrange(10)
@@ -92,25 +90,57 @@ async def пойтиназавод(ctx: commands.Context):
         await ctx.reply(f'Вы пошли на завод. Следующая смена через 6 часов. +{revenue} UAH')
     else:
         await ctx.reply(f'Вы уже были на заводе, вам нужен отдых')
-# async def продать_хряка(ctx: commands.Context):
-#     if db.search(query.owner == str(ctx.author.id)):
-#         pig = getPigWithId(ctx.author.id)
-#         cost = math.sqrt(pig['weight']) * 2
-#         if pig['weight'] > 20:
-#             await ctx.reply(f'Ваш хряк весит {math.ceil(pig["weight"])}кг. Он будет стоить {math.ceil(cost)}$')
-#         else:
-#             await ctx.reply('Похоже ваш хряк слишком маленький, нужно его откормить ещё')
-#     else:
-#         await ctx.reply(f'Похоже у вас нет хряка.')
-        
-
+@bot.command()
+async def купитькорм(ctx: commands.Context):
+    pig = getPigWithId(ctx.author.id)
+    global food_cost
+    if pig['money'] >= food_cost:
+        db.update({'food': pig['food'] + 25}, query.owner == pig['owner'])
+        db.update({'money': pig['money'] - food_cost}, query.owner == pig['owner'])
+        await ctx.reply(f"Количество корма теперь {pig['food'] + 25}")
+    else:
+        await ctx.reply(f'Недостатньо коштiв')
 
 @bot.command()
-async def хряк_дрочписюн(ctx: commands.Context):
+async def ценакорма(ctx: commands.Context):
+    await ctx.reply(f"Корм стоит {round(food_cost, 2)} UAH за упаковку")
+    
+@bot.command()
+async def дрочписюн(ctx: commands.Context):
+    await ctx.send(text)
     if sleeping:
         await ctx.reply("☎☎☏ мммм дааоаоао ☏☏☎")
+@bot.command()
+async def помощь(ctx: commands.Context):
+    text = "\n>>> Команды:"
+    text = text + " `создатьхряка *имя*`\n"
+    text = text + " `покормить *кол-во корма*`\n"
+    text = text + " `хряк`\n"
+    text = text + " `топ`\n"
+    text = text + " `пойтиназавод`\n"
+    text = text + " `ценакорма`\n"
+    text = text + " `купитькорм`\n"
+    text = text + " префикс: *!*\n"
+
 @tasks.loop(seconds=1)
 async def change_status():
+    global food_cost
+    global priceRises
+    if priceRises:
+        rand = (randrange(100) / 10000 - 0.004)
+    else:
+        rand = (randrange(100) / 10000 - 0.006)
+    if food_cost < 8:
+        priceRises = True
+    elif food_cost > 15:
+        priceRises = False
+
+    if rand > 0 and food_cost < 15:
+        food_cost += rand
+    if rand < 0 and food_cost > 8:
+        food_cost += rand
+
+
     if not sleeping:
         if db.search(query.owner != ""):
             for val in db.all():
@@ -118,7 +148,6 @@ async def change_status():
                 db.update({'factory': val['factory'] - 1}, query.owner == val['owner'])
                 if val['satiety'] < 0.01:
                     db.update({'weight': val['weight'] * 0.9999}, query.owner == val['owner'])
-                
 change_status.start()
 
     # channel = bot.get_channel = xxx
@@ -127,10 +156,8 @@ change_status.start()
     # await bot.channel.send('here')
 
 @bot.command()
-async def context(ctx: commands.Context):
-    print(ctx.message)
-    await ctx.reply("Author is " + str(ctx.author) + " id: " + str(ctx.author.id))
-
+async def context(ctx: commands.Context, pigName):
+    await ctx.reply(db.search(query.name == pigName))
 async def feed(food, owner, ctx): 
     pig = getPigWithId(owner)
     satiety = pig['satiety']
