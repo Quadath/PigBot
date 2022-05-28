@@ -6,7 +6,27 @@ import time
 import json
 from tinydb import TinyDB, Query
 from discord.ext import commands
+from PIL import Image, ImageDraw
 
+priceHistory = []
+
+# draw.line((w, h) + (100, 160), fill=128)
+scheduleImg = None
+
+
+def schedule(array):
+    global scheduleImg
+    scheduleImg  = Image.new( mode = "RGB", size = (500, 300), color = (255, 255, 255))
+    draw = ImageDraw.Draw(scheduleImg)
+    i = 1
+    lenght = len(array)
+    padding = 500 / lenght
+    print(-array[i - 1] * 30)
+    for item in array:
+        if i < lenght:
+            draw.line((i * padding - padding, (-array[i - 1] * 30) + 500) + (i * padding, (-array[i] * 30) + 500), fill=128)
+            i += 1
+    scheduleImg.save('img.png')
 
 config = {
     'token': 'ODc4ODczODgwNTA3MzUxMTQw.Gj0-hT.oTDxCNSeoKVkUHifQGNJ3l1weua0gsj0Vh5gCI',
@@ -49,8 +69,10 @@ async def кормить(ctx: commands.Context, food):
     else:
         await ctx.reply('Хряки спят. Возвращайтесь позже!')
 @bot.command()
-
 async def хряк(ctx: commands.Context):
+    if not db.search(query.owner == str(ctx.author.id)):
+        await ctx.reply('У вас нет хряка')
+        return
     if not sleeping:
         pig = getPigWithId(ctx.author.id)
         satiety = pig['satiety']
@@ -106,15 +128,20 @@ async def купитькорм(ctx: commands.Context, count):
         total_cost = food_cost * int(count)
         pig = getPigWithId(ctx.author.id)
 
+
         if pig['money'] >= total_cost:
             food_cost += total_cost / 9.8
-            db.update({'food': pig['food'] + 25}, query.owner == pig['owner'])
+            db.update({'food': pig['food'] + 25 * int(count)}, query.owner == pig['owner'])
             db.update({'money': pig['money'] - total_cost}, query.owner == pig['owner'])
-            await ctx.reply(f"Количество корма теперь {pig['food'] + 25 * count}")
+            await ctx.reply(f"Количество корма теперь {pig['food'] + 25 * int(count)}")
         else:
             await ctx.reply(f'Недостатньо коштiв')
 @bot.command()
 async def ценакорма(ctx: commands.Context):
+    # global priceHistory
+    # schedule(priceHistory)
+    # await ctx.reply(file = discord.File('img.png'))
+
     await ctx.reply(f"{round(food_cost)} грн {round(food_cost % 1 * 100)} коп. за упаковку")
 @bot.command()
 async def гуси(ctx: commands.Context, pigName):
@@ -137,6 +164,21 @@ async def гуси(ctx: commands.Context, pigName):
             await ctx.reply(f'Недостатньо коштiв')
     else:
         await ctx.reply(f'Такого хряка не существует')
+@bot.command()
+async def перевод(ctx: commands.Context, pigName, money):
+    recipient = db.search(query.name == pigName)[0]
+    pig = getPigWithId(ctx.author.id)
+    money = int(money)
+    if recipient:
+        if pig['money'] >= money:
+            db.update({'money': pig['money'] - money}, query.owner == pig['owner'])
+            db.update({'money': recipient['money'] + money}, query.owner == recipient['owner'])
+            await ctx.reply(f'Переведено {money} грн хряку {pigName}')
+        else:
+            await ctx.reply(f'Недостатньо коштiв')
+    else:
+        await ctx.reply(f'Неизвестный получатель')
+
 @bot.command()
 async def дрочписюн(ctx: commands.Context):
     if sleeping:
@@ -165,7 +207,7 @@ async def change_status():
         rand = (randrange(100) / 10000 - 0.004)
     else:
         rand = (randrange(100) / 10000 - 0.006)
-    if food_cost < 8 or randrange(1000) == 2:
+    if food_cost < 8 or randrange(2000) == 2:
         priceRises = True
     elif food_cost > 15 or randrange(1000) == 1:
         priceRises = False
@@ -175,14 +217,13 @@ async def change_status():
     if rand < 0 and food_cost > 7.7:
         food_cost += rand
 
-
     if not sleeping:
         if db.search(query.owner != ""):
             for val in db.all():
-                db.update({'satiety': val['satiety'] * 0.9995}, query.owner == val['owner'])
+                db.update({'satiety': val['satiety'] * 0.9998}, query.owner == val['owner'])
                 db.update({'factory': val['factory'] - 1}, query.owner == val['owner'])
                 if val['satiety'] < 0.001:
-                    db.update({'weight': val['weight'] * 0.9999}, query.owner == val['owner'])
+                    db.update({'weight': val['weight'] * 0.9999999}, query.owner == val['owner'])
 change_status.start()
 
     # channel = bot.get_channel = xxx
@@ -191,8 +232,8 @@ change_status.start()
     # await bot.channel.send('here')
 
 @bot.command()
-async def context(ctx: commands.Context, pigName):
-    await ctx.reply(db.search(query.name == pigName))
+async def context(ctx: commands.Context):
+    await ctx.reply(food_cost)
 async def feed(food, owner, ctx): 
     pig = getPigWithId(owner)
     satiety = pig['satiety']
